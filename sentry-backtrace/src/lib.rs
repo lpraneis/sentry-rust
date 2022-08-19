@@ -21,7 +21,21 @@ pub use crate::process::{backtrace_to_stacktrace, process_event_stacktrace};
 pub use crate::trim::trim_stacktrace;
 pub use sentry_core::protocol::{Frame, Stacktrace};
 
+/// Strategy to use when creating the backtrace
+#[derive(Default, Debug, Copy, Clone)]
+pub enum BacktraceResolutionStrategy {
+    /// Backtrace with resolved symbols
+    #[default]
+    SymbolsResolved,
+    /// Backtrace with unresolved addresses only
+    Unresolved,
+}
+
 /// Returns the current backtrace as sentry stacktrace.
-pub fn current_stacktrace() -> Option<Stacktrace> {
-    backtrace_to_stacktrace(&backtrace::Backtrace::new())
+pub fn current_stacktrace(strategy: BacktraceResolutionStrategy) -> Option<Stacktrace> {
+    let backtrace = match strategy {
+        BacktraceResolutionStrategy::SymbolsResolved => backtrace::Backtrace::new(),
+        BacktraceResolutionStrategy::Unresolved => backtrace::Backtrace::new_unresolved(),
+    };
+    backtrace_to_stacktrace(&backtrace)
 }

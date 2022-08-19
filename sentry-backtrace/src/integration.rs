@@ -3,8 +3,8 @@ use std::thread;
 use sentry_core::protocol::{Event, Thread};
 use sentry_core::{ClientOptions, Integration};
 
-use crate::current_stacktrace;
 use crate::process::process_event_stacktrace;
+use crate::{current_stacktrace, BacktraceResolutionStrategy};
 
 /// Integration to process Event stacktraces.
 ///
@@ -54,12 +54,20 @@ impl Integration for ProcessStacktraceIntegration {
 /// This integration will add an additional thread backtrace to captured
 /// messages, respecting the `attach_stacktrace` option.
 #[derive(Debug, Default)]
-pub struct AttachStacktraceIntegration;
+pub struct AttachStacktraceIntegration {
+    /// Strategy to use when performing the backtrace
+    backtrace_strategy: BacktraceResolutionStrategy,
+}
 
 impl AttachStacktraceIntegration {
     /// Creates a new Integration to attach stacktraces to Events.
     pub fn new() -> Self {
         Self::default()
+    }
+    /// Creates a new Integration to attach stacktraces to Events with a given backtrace resolution
+    /// strategy
+    pub fn new_with_resolution_strategy(backtrace_strategy: BacktraceResolutionStrategy) -> Self {
+        Self { backtrace_strategy }
     }
 }
 
@@ -74,7 +82,7 @@ impl Integration for AttachStacktraceIntegration {
         options: &ClientOptions,
     ) -> Option<Event<'static>> {
         if options.attach_stacktrace && !has_stacktrace(&event) {
-            let thread = current_thread(true);
+            let thread = current_thread(true, self.backtrace_strategy);
             if thread.stacktrace.is_some() {
                 event.threads.values.push(thread);
             }
@@ -93,7 +101,7 @@ fn has_stacktrace(event: &Event) -> bool {
 ///
 /// If `with_stack` is set to `true` the current stacktrace is
 /// attached.
-pub fn current_thread(with_stack: bool) -> Thread {
+pub fn current_thread(with_stack: bool, backtrace_strategy: BacktraceResolutionStrategy) -> Thread {
     // NOTE: `as_u64` is nightly only
     // See https://github.com/rust-lang/rust/issues/67939
     let thread_id: u64 = unsafe { std::mem::transmute(thread::current().id()) };
@@ -102,7 +110,7 @@ pub fn current_thread(with_stack: bool) -> Thread {
         name: thread::current().name().map(str::to_owned),
         current: true,
         stacktrace: if with_stack {
-            current_stacktrace()
+            current_stacktrace(backtrace_strategy)
         } else {
             None
         },

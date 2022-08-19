@@ -22,7 +22,7 @@
 use std::panic::{self, PanicInfo};
 use std::sync::Once;
 
-use sentry_backtrace::current_stacktrace;
+use sentry_backtrace::{current_stacktrace, BacktraceResolutionStrategy};
 use sentry_core::protocol::{Event, Exception, Level, Mechanism};
 use sentry_core::{ClientOptions, Integration};
 
@@ -46,12 +46,14 @@ type PanicExtractor = dyn Fn(&PanicInfo<'_>) -> Option<Event<'static>> + Send + 
 #[derive(Default)]
 pub struct PanicIntegration {
     extractors: Vec<Box<PanicExtractor>>,
+    backtrace_strategy: BacktraceResolutionStrategy,
 }
 
 impl std::fmt::Debug for PanicIntegration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PanicIntegration")
             .field("extractors", &self.extractors.len())
+            .field("backtrace strategy", &self.backtrace_strategy)
             .finish()
     }
 }
@@ -91,6 +93,14 @@ impl PanicIntegration {
         Self::default()
     }
 
+    /// Creates a new Panic Integration with a given backtrace resoltion strategy
+    pub fn new_with_backtrace_type(backtrace_strategy: BacktraceResolutionStrategy) -> Self {
+        Self {
+            backtrace_strategy,
+            extractors: Default::default(),
+        }
+    }
+
     /// Registers a new extractor.
     #[must_use]
     pub fn add_extractor<F>(mut self, f: F) -> Self
@@ -125,7 +135,7 @@ impl PanicIntegration {
                     ..Default::default()
                 }),
                 value: Some(msg.to_string()),
-                stacktrace: current_stacktrace(),
+                stacktrace: current_stacktrace(self.backtrace_strategy),
                 ..Default::default()
             }]
             .into(),
